@@ -191,4 +191,43 @@ document.addEventListener('DOMContentLoaded', function () {
         event.preventDefault();
         fetchModels();
     });
+
+    // Function to detect the user's browser and platform
+    function detectBrowser() {
+        const userAgent = navigator.userAgent;
+        let browser = 'Unknown';
+
+        if (userAgent.indexOf('Firefox') > -1) {
+            browser = 'Firefox';
+        } else if (userAgent.indexOf('Chrome') > -1) {
+            browser = 'Chrome';
+        } else if (userAgent.indexOf('Safari') > -1) {
+            browser = 'Safari';
+        } else if (userAgent.indexOf('MSIE') > -1 || userAgent.indexOf('Trident/') > -1) {
+            browser = 'Internet Explorer';
+        } else if (userAgent.indexOf('Edge') > -1) {
+            browser = 'Edge';
+        }
+
+        return browser;
+    }
+
+    // Function to display the relevant instructions in the modal
+    function displayInstructions() {
+        const browser = detectBrowser();
+        const instructions = {
+            'Chrome': 'To disable CORS in Chrome, follow these steps: ...',
+            'Firefox': 'To disable CORS in Firefox, follow these steps: ...',
+            'Safari': 'To disable CORS in Safari, follow these steps: ...',
+            'Internet Explorer': 'To disable CORS in Internet Explorer, follow these steps: ...',
+            'Edge': 'To disable CORS in Edge, follow these steps: ...',
+            'Unknown': 'Please refer to your browser\'s documentation to disable CORS.'
+        };
+
+        const modalBody = document.getElementById('cors-instructions-body');
+        modalBody.textContent = instructions[browser];
+    }
+
+    // Call the function to display the instructions when the page loads
+    displayInstructions();
 });
