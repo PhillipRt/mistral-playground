@@ -3,71 +3,26 @@ document.addEventListener('DOMContentLoaded', function () {
     const chatHistory = document.getElementById('chat-history');
     const userInput = document.getElementById('user-input');
     const apiKeyInput = document.getElementById('api-key');
-    const modelSelection = document.getElementById('model-selection'); // Get the model selection dropdown
+    const modelSelection = document.getElementById('model-selection');
     const temperatureInput = document.getElementById('temperature');
     const topPInput = document.getElementById('top_p');
     const maxTokensInput = document.getElementById('max_tokens');
     const safeModeInput = document.getElementById('safe_mode');
     const randomSeedInput = document.getElementById('random_seed');
-    let conversationHistory = []; // Initialize an empty array to store the conversation history
+    let conversationHistory = [];
 
-    // Get the elements
     const advancedOptionsButton = document.getElementById('burger-button');
     const advancedOptionsOverlay = document.getElementById('advanced-options');
-
-    // Get the offcanvas instance
     const offcanvas = new bootstrap.Offcanvas(advancedOptionsOverlay);
 
-    // Add event listener to the button
     advancedOptionsButton.addEventListener('click', function () {
-        // Show the offcanvas
         offcanvas.show();
     });
 
-    // Add event listener to the close button
     advancedOptionsOverlay.querySelector('.btn-close').addEventListener('click', function () {
-        // Hide the offcanvas
         offcanvas.hide();
     });
 
-    // Function to detect the user's browser and platform
-    function detectBrowser() {
-        const userAgent = navigator.userAgent;
-        if (userAgent.includes("Chrome")) {
-            return "Chrome";
-        } else if (userAgent.includes("Firefox")) {
-            return "Firefox";
-        } else if (userAgent.includes("Safari")) {
-            return "Safari";
-        } else if (userAgent.includes("Edge")) {
-            return "Edge";
-        } else if (userAgent.includes("Trident")) {
-            return "Internet Explorer";
-        } else {
-            return "Other";
-        }
-    }
-
-    // Function to display the relevant instructions in the modal based on the detected browser
-    function displayCorsInstructions() {
-        const browser = detectBrowser();
-        const instructions = {
-            "Chrome": "Install the CORS Unblock extension from the Chrome Web Store and enable it.",
-            "Firefox": "Install the CORS Everywhere extension from the Firefox Add-ons site and enable it.",
-            "Safari": "Go to Develop in the menu bar and select Disable Cross-Origin Restrictions.",
-            "Edge": "Install the CORS Unblock extension from the Edge Add-ons site and enable it.",
-            "Internet Explorer": "Go to Internet Options, select the Security tab, click on Custom level..., scroll down to Miscellaneous and set Access data sources across domains to Enable.",
-            "Other": "Please refer to your browser's documentation to disable CORS."
-        };
-        document.getElementById('cors-instructions').textContent = instructions[browser];
-        const corsModal = new bootstrap.Modal(document.getElementById('cors-modal'));
-        corsModal.show();
-    }
-
-    // Call the function to display the instructions when the page loads
-    displayCorsInstructions();
-
-    // Function to fetch models from the API
     function fetchModels() {
         const apiKey = apiKeyInput.value;
         fetch('https://api.mistral.ai/v1/models', {
@@ -77,24 +32,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Authorization': `Bearer ${apiKey}`
             },
         })
-            .then(response => {
-                if (response.status === 401) {
-                    displayCorsInstructions();
-                    throw new Error('CORS issue detected. Please disable CORS in your browser.');
-                }
-                return response.json();
-            })
+            .then(response => response.json())
             .then(data => {
                 populateModelSelection(data.data);
             })
             .catch(error => {
                 console.error('Error:', error);
+                showErrorToast(`Error fetching models: ${error.message}`);
             });
     }
 
-    // Function to populate the model selection dropdown
     function populateModelSelection(models) {
-        modelSelection.innerHTML = ''; // Clear existing options
+        modelSelection.innerHTML = '';
         models.forEach(model => {
             const option = document.createElement('option');
             option.value = model.id;
@@ -103,7 +52,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Function to append messages to the chat history
     function appendMessage(text, isUser = false) {
         const messageElement = document.createElement('div');
         messageElement.className = isUser ? 'user-message' : 'assistant-message';
@@ -114,42 +62,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
         messageElement.appendChild(messageContent);
         chatHistory.appendChild(messageElement);
-        chatHistory.scrollTop = chatHistory.scrollHeight; // Scroll to the bottom
+        chatHistory.scrollTop = chatHistory.scrollHeight;
 
-        return messageContent; // Return the message content element
+        return messageContent;
     }
 
-    // Function to handle form submission
     chatForm.addEventListener('submit', function (event) {
         event.preventDefault();
         const userMessage = userInput.value.trim();
         if (userMessage) {
-            appendMessage(userMessage, true); // Display the user's message
-            userInput.value = ''; // Clear the input field
+            appendMessage(userMessage, true);
+            userInput.value = '';
 
-            // Retrieve the API key when sending a message
             const apiKey = apiKeyInput.value;
-
-            // Add user message to the conversation history
             conversationHistory.push({ role: 'user', content: userMessage });
 
-            // Construct the request body
             const requestBody = {
-                model: modelSelection.value, // Use the selected model
+                model: modelSelection.value,
                 messages: conversationHistory,
                 temperature: parseFloat(temperatureInput.value),
                 top_p: parseFloat(topPInput.value),
-                safe_mode: safeModeInput.checked,
                 random_seed: parseInt(randomSeedInput.value),
                 stream: true
-                // TODO: Add other parameters as needed
             };
 
             if (maxTokensInput.value) {
                 requestBody.max_tokens = parseInt(maxTokensInput.value);
             }
 
-            // Send the message to the Mistral API
             fetch('https://api.mistral.ai/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -168,70 +108,67 @@ document.addEventListener('DOMContentLoaded', function () {
                                 return;
                             }
 
-                            // Buffer the received data
                             accumulatedResponse += new TextDecoder("utf-8").decode(value);
 
                             try {
                                 let newlineIndex;
-                                // While there are complete JSON objects in accumulatedResponse
                                 while ((newlineIndex = accumulatedResponse.indexOf('\n')) !== -1) {
-                                                                       // Extract the JSON object
                                     const line = accumulatedResponse.slice(0, newlineIndex);
-                                                                       accumulatedResponse = accumulatedResponse.slice(newlineIndex + 1);
+                                    accumulatedResponse = accumulatedResponse.slice(newlineIndex + 1);
 
-                                    // Process the event
                                     if (line.startsWith('data: ')) {
                                         const data = JSON.parse(line.slice(6));
 
-                                        // Append the message content to the UI
                                         if (data.choices[0].delta.role === 'assistant') {
-                                            conversationHistory.push({ role: 'assistant', content: data.choices[0].delta.content||'' });
+                                            conversationHistory.push({ role: 'assistant', content: data.choices[0].delta.content || '' });
                                             appendMessage(data.choices[0].delta.content, false);
                                         } else if (data.choices[0].delta.role === null) {
                                             conversationHistory[conversationHistory.length - 1].content += data.choices[0].delta.content;
-                                            // Update the last assistant message in the chat
                                             const lastMessageElement = chatHistory.lastElementChild;
                                             lastMessageElement.textContent += data.choices[0].delta.content;
                                             window.requestAnimationFrame(() => {
-                                                chatHistory.scrollTop = chatHistory.scrollHeight; // Scroll to the bottom
+                                                chatHistory.scrollTop = chatHistory.scrollHeight;
                                             });
                                         }
                                     }
                                 }
                             } catch (error) {
-                                // If an error occurs, it means the accumulated response does not represent a complete JSON object
-                                // We ignore this error and continue reading the next chunk
+                                // Ignore parsing errors for incomplete JSON
                             }
 
-                            // Read the next chunk
                             return readChunk();
                         });
                     }
 
-                    // Start reading the response
                     return readChunk();
                 })
                 .catch(error => {
-                    // Handle the error
                     console.error('Error:', error);
                     showErrorToast(`Error: ${error.message}`);
                 });
         }
     });
 
-    // Function to display the toast
     function showErrorToast(message) {
         const toast = new bootstrap.Toast(document.getElementById('error-toast'));
         document.getElementById('error-toast-body').textContent = message;
         toast.show();
     }
 
-    // TODO: Implement the function to send messages to the Mistral API
-    // and stream responses back.
-
     const setApiKeyButton = document.querySelector('.mb-3 .btn.btn-orange');
     setApiKeyButton.addEventListener('click', function (event) {
         event.preventDefault();
         fetchModels();
+    });
+
+    const clearChatButton = document.getElementById('clear-chat');
+
+    function clearChat() {
+        chatHistory.innerHTML = '';
+        conversationHistory = [];
+    }
+
+    clearChatButton.addEventListener('click', function() {
+        clearChat();
     });
 });
