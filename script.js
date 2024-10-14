@@ -30,6 +30,43 @@ document.addEventListener('DOMContentLoaded', function () {
         offcanvas.hide();
     });
 
+    // Function to detect the user's browser and platform
+    function detectBrowser() {
+        const userAgent = navigator.userAgent;
+        if (userAgent.includes("Chrome")) {
+            return "Chrome";
+        } else if (userAgent.includes("Firefox")) {
+            return "Firefox";
+        } else if (userAgent.includes("Safari")) {
+            return "Safari";
+        } else if (userAgent.includes("Edge")) {
+            return "Edge";
+        } else if (userAgent.includes("Trident")) {
+            return "Internet Explorer";
+        } else {
+            return "Other";
+        }
+    }
+
+    // Function to display the relevant instructions in the modal based on the detected browser
+    function displayCorsInstructions() {
+        const browser = detectBrowser();
+        const instructions = {
+            "Chrome": "Install the CORS Unblock extension from the Chrome Web Store and enable it.",
+            "Firefox": "Install the CORS Everywhere extension from the Firefox Add-ons site and enable it.",
+            "Safari": "Go to Develop in the menu bar and select Disable Cross-Origin Restrictions.",
+            "Edge": "Install the CORS Unblock extension from the Edge Add-ons site and enable it.",
+            "Internet Explorer": "Go to Internet Options, select the Security tab, click on Custom level..., scroll down to Miscellaneous and set Access data sources across domains to Enable.",
+            "Other": "Please refer to your browser's documentation to disable CORS."
+        };
+        document.getElementById('cors-instructions').textContent = instructions[browser];
+        const corsModal = new bootstrap.Modal(document.getElementById('cors-modal'));
+        corsModal.show();
+    }
+
+    // Call the function to display the instructions when the page loads
+    displayCorsInstructions();
+
     // Function to fetch models from the API
     function fetchModels() {
         const apiKey = apiKeyInput.value;
@@ -40,7 +77,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Authorization': `Bearer ${apiKey}`
             },
         })
-            .then(response => response.json())
+            .then(response => {
+                if (response.status === 401) {
+                    displayCorsInstructions();
+                    throw new Error('CORS issue detected. Please disable CORS in your browser.');
+                }
+                return response.json();
+            })
             .then(data => {
                 populateModelSelection(data.data);
             })
@@ -191,43 +234,4 @@ document.addEventListener('DOMContentLoaded', function () {
         event.preventDefault();
         fetchModels();
     });
-
-    // Function to detect the user's browser and platform
-    function detectBrowser() {
-        const userAgent = navigator.userAgent;
-        let browser = 'Unknown';
-
-        if (userAgent.indexOf('Firefox') > -1) {
-            browser = 'Firefox';
-        } else if (userAgent.indexOf('Chrome') > -1) {
-            browser = 'Chrome';
-        } else if (userAgent.indexOf('Safari') > -1) {
-            browser = 'Safari';
-        } else if (userAgent.indexOf('MSIE') > -1 || userAgent.indexOf('Trident/') > -1) {
-            browser = 'Internet Explorer';
-        } else if (userAgent.indexOf('Edge') > -1) {
-            browser = 'Edge';
-        }
-
-        return browser;
-    }
-
-    // Function to display the relevant instructions in the modal
-    function displayInstructions() {
-        const browser = detectBrowser();
-        const instructions = {
-            'Chrome': 'To disable CORS in Chrome, follow these steps: ...',
-            'Firefox': 'To disable CORS in Firefox, follow these steps: ...',
-            'Safari': 'To disable CORS in Safari, follow these steps: ...',
-            'Internet Explorer': 'To disable CORS in Internet Explorer, follow these steps: ...',
-            'Edge': 'To disable CORS in Edge, follow these steps: ...',
-            'Unknown': 'Please refer to your browser\'s documentation to disable CORS.'
-        };
-
-        const modalBody = document.getElementById('cors-instructions-body');
-        modalBody.textContent = instructions[browser];
-    }
-
-    // Call the function to display the instructions when the page loads
-    displayInstructions();
 });

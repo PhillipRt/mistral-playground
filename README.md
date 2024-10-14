@@ -36,3 +36,7 @@ To use this application, you may need to disable CORS in your browser. Follow th
 
 ### Other Browsers
 Please refer to your browser's documentation to disable CORS.
+
+## New Modal for Disabling CORS
+
+We have added a new modal in the application to help you disable CORS based on your browser. The application will detect your browser and provide specific instructions on how to disable CORS. Follow the instructions provided in the modal when you run the application.
