@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const temperatureInput = document.getElementById('temperature');
     const topPInput = document.getElementById('top_p');
     const maxTokensInput = document.getElementById('max_tokens');
-    const safeModeInput = document.getElementById('safe_mode');
     const randomSeedInput = document.getElementById('random_seed');
     let conversationHistory = [];
 
@@ -57,14 +56,143 @@ document.addEventListener('DOMContentLoaded', function () {
         messageElement.className = isUser ? 'user-message' : 'assistant-message';
 
         const messageContent = document.createElement('div');
-        messageContent.textContent = text;
         messageContent.className = 'message-content';
+        
+        if (!isUser) {
+            messageContent.style.opacity = '0';
+            messageContent.style.transform = 'translateX(-20px)';
+            messageContent.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        } else {
+            messageContent.textContent = text;
+        }
 
         messageElement.appendChild(messageContent);
         chatHistory.appendChild(messageElement);
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
+        if (!isUser) {
+            setTimeout(() => {
+                messageContent.style.opacity = '1';
+                messageContent.style.transform = 'translateX(0)';
+            }, 10);
+        }
+
         return messageContent;
+    }
+
+    function createMarkdownRenderer() {
+        const renderer = new marked.Renderer();
+        
+        renderer.heading = function(text, level) {
+            return `<h${level} class="mt-3 mb-2">${text}</h${level}>`;
+        };
+
+        renderer.listitem = function(text) {
+            return `<li>${text}</li>`;
+        };
+
+        renderer.list = function(body, ordered, start) {
+            const type = ordered ? 'ol' : 'ul';
+            const startAttr = (ordered && start !== 1) ? ` start="${start}"` : '';
+            return `<${type}${startAttr} class="mb-3">\n${body}</${type}>\n`;
+        };
+
+        renderer.blockquote = function(quote) {
+            return `<blockquote class="blockquote border-start border-3 ps-3 py-2 mb-3">${quote}</blockquote>`;
+        };
+
+        renderer.code = function(code, language) {
+            return `<pre><code class="language-${language || 'plaintext'} p-2 mb-3">${marked.parseInline(code)}</code></pre>`;
+        };
+
+        renderer.table = function(header, body) {
+            return '<table class="table table-bordered mb-3">\n'
+                + '<thead>\n'
+                + header
+                + '</thead>\n'
+                + '<tbody>\n'
+                + body
+                + '</tbody>\n'
+                + '</table>\n';
+        };
+
+        renderer.link = function(href, title, text) {
+            return `<a href="${href}" title="${title || ''}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+        };
+
+        renderer.image = function(href, title, text) {
+            return `<img src="${href}" alt="${text}" title="${title || ''}" class="img-fluid mb-3">`;
+        };
+
+        renderer.codespan = function(code) {
+            return `<code class="bg-light px-1 py-1">${marked.parseInline(code)}</code>`;
+        };
+
+        renderer.hr = function() {
+            return '<hr class="my-3">';
+        };
+
+        function renderMarkdown(text) {
+            return marked.parse(text, { 
+                renderer: renderer,
+                gfm: true,
+                breaks: true,
+                sanitize: false,
+                smartLists: true,
+                smartypants: false,
+                xhtml: false
+            });
+        }
+
+        return { renderMarkdown };
+    }
+
+    const markdownRenderer = createMarkdownRenderer();
+
+    let accumulatedContent = '';
+    let visibleContent = null;
+    let bufferElement = null;
+    let lastBuffer = '';
+
+    function updateContent(newContent, messageContent) {
+        if (!visibleContent) {
+            visibleContent = document.createElement('div');
+            visibleContent.className = 'markdown-content';
+            messageContent.appendChild(visibleContent);
+        }
+
+        // Convert newContent to string, handling objects properly
+        if (typeof newContent === 'object' && newContent !== null) {
+            newContent = JSON.stringify(newContent, null, 2);
+        } else if (typeof newContent !== 'string') {
+            newContent = String(newContent);
+        }
+        
+        accumulatedContent += newContent;
+
+        // Render Markdown
+        const renderedContent = markdownRenderer.renderMarkdown(accumulatedContent);
+
+        // Update the content
+        visibleContent.innerHTML = renderedContent;
+
+        // Animate new content
+        const newElements = Array.from(visibleContent.children);
+        newElements.forEach(el => {
+            if (!el.dataset.animated) {
+                el.style.opacity = '0';
+                el.style.transform = 'translateX(-10px)';
+                el.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+                
+                setTimeout(() => {
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateX(0)';
+                    el.dataset.animated = 'true';
+                }, 10);
+            }
+        });
+
+        chatHistory.scrollTop = chatHistory.scrollHeight;
     }
 
     chatForm.addEventListener('submit', function (event) {
@@ -90,6 +218,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 requestBody.max_tokens = parseInt(maxTokensInput.value);
             }
 
+            let assistantMessageContent = appendMessage('', false);
+            accumulatedContent = '';
+            visibleContent = null;
+
             fetch('https://api.mistral.ai/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -98,54 +230,45 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 body: JSON.stringify(requestBody),
             })
-                .then(response => {
-                    const reader = response.body.getReader();
-                    let accumulatedResponse = '';
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
 
-                    function readChunk() {
-                        return reader.read().then(({ done, value }) => {
-                            if (done) {
-                                return;
-                            }
+                function readStream() {
+                    return reader.read().then(({ done, value }) => {
+                        if (done) {
+                            return;
+                        }
 
-                            accumulatedResponse += new TextDecoder("utf-8").decode(value);
-
-                            try {
-                                let newlineIndex;
-                                while ((newlineIndex = accumulatedResponse.indexOf('\n')) !== -1) {
-                                    const line = accumulatedResponse.slice(0, newlineIndex);
-                                    accumulatedResponse = accumulatedResponse.slice(newlineIndex + 1);
-
-                                    if (line.startsWith('data: ')) {
-                                        const data = JSON.parse(line.slice(6));
-
-                                        if (data.choices[0].delta.role === 'assistant') {
-                                            conversationHistory.push({ role: 'assistant', content: data.choices[0].delta.content || '' });
-                                            appendMessage(data.choices[0].delta.content, false);
-                                        } else if (data.choices[0].delta.role === null) {
-                                            conversationHistory[conversationHistory.length - 1].content += data.choices[0].delta.content;
-                                            const lastMessageElement = chatHistory.lastElementChild;
-                                            lastMessageElement.textContent += data.choices[0].delta.content;
-                                            window.requestAnimationFrame(() => {
-                                                chatHistory.scrollTop = chatHistory.scrollHeight;
-                                            });
-                                        }
-                                    }
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        lines.forEach(line => {
+                            if (line.startsWith('data: ')) {
+                                const jsonString = line.slice(5).trim(); // Remove 'data: ' prefix
+                                if (jsonString === '[DONE]') {
+                                    // Stream finished
+                                    return;
                                 }
-                            } catch (error) {
-                                // Ignore parsing errors for incomplete JSON
+                                try {
+                                    const data = JSON.parse(jsonString);
+                                    processChunk(data, assistantMessageContent);
+                                } catch (error) {
+                                    console.error('Error parsing JSON:', error);
+                                }
                             }
-
-                            return readChunk();
                         });
-                    }
 
-                    return readChunk();
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showErrorToast(`Error: ${error.message}`);
-                });
+                        return readStream();
+                    });
+                }
+
+                return readStream();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showErrorToast(`Error: ${error.message}`);
+            });
         }
     });
 
@@ -171,4 +294,14 @@ document.addEventListener('DOMContentLoaded', function () {
     clearChatButton.addEventListener('click', function() {
         clearChat();
     });
+
+    function processChunk(data, messageContent) {
+        const { choices } = data;
+        if (choices && choices.length > 0) {
+            const { delta } = choices[0];
+            if (delta && delta.content) {
+                updateContent(delta.content, messageContent);
+            }
+        }
+    }
 });
